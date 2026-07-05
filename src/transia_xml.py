@@ -1,7 +1,5 @@
-import json, os, sys, time
+import json, os, sys
 import boto3
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "_vendor"))
-import requests
 
 lambda_client = boto3.client("lambda")
 CONVERTIR_DOCX_FN = os.environ.get("CONVERTIR_DOCX_FUNCTION", "")
@@ -42,15 +40,15 @@ ALL_FIELDS = [
     "resultado_seguridad_1","recomendaciones","noticias_seguridad","conclusiones",
 ]
 
+SYSTEM_PROMPT = """Eres un analista senior de ciberseguridad redactando un reporte ejecutivo profesional para un cliente corporativo. El reporte debe transmitir seriedad, experiencia y valor analitico.
 
-SYSTEM_PROMPT = """Eres analista de seguridad senior. Genera SOLO JSON valido (sin markdown, sin texto extra).
-
-REGLAS ESTRICTAS:
-1. Todos los campos deben tener contenido relevante y especifico (nunca vacio)
-2. Capitalizacion correcta en titulos y texto (mayusculas donde corresponde)
-3. Incluye metricas, numeros y datos concretos de los DATOS DEL REPORTE
-4. Incluye conclusiones claras basadas en los hallazgos
-5. Texto profesional, detallado y ejecutivo
+DIRECTRICES DE CALIDAD PROFESIONAL:
+- Lenguaje ejecutivo formal, como para un CEO o CISO
+- Datos especificos con numeros y metricas concretas (nunca terminos vagos como "varios" o "algunos")
+- Vocabulario tecnico apropiado pero comprensible para la alta direccion
+- Parrafos completos con estructura clara (minimo 2-3 oraciones por campo)
+- Tono objetivo, analitico y orientado a soluciones
+- Cada hallazgo debe incluir impacto y recomendacion
 
 CAMPOS (131 total):
 cliente, periodo, fecha_reporte, servicio_monitoreo,
@@ -65,12 +63,14 @@ servidor_trujillo_1..3|genesys_2|lima|canada_1..2,
 prioridad_1..4, servidor_estado,
 switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
 accion_semana_1..15, resultado_seguridad_1, conclusiones,
-recomendaciones (array 3), noticias_seguridad (array 3)"""
+recomendaciones (array 3), noticias_seguridad (array 3)
+
+REGLA FUNDAMENTAL: Responde UNICAMENTE con el objeto JSON. Ningun texto adicional. Ningun campo vacio."""
 
 
 def _parse_json(text):
     if not text or not text.strip():
-        raise ValueError(f"_parse_json: entrada vacia (None o solo whitespace)")
+        raise ValueError("_parse_json: entrada vacia")
     text = text.strip()
     for prefix in ("```json", "```"):
         if text.startswith(prefix):
@@ -84,84 +84,9 @@ def _parse_json(text):
     return json.loads(text)
 
 
-def _call_groq(prompt, system_prompt, max_tokens=2500):
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        return None
-    try:
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": "llama-3.1-8b-instant",
-                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
-                "max_tokens": max_tokens,
-                "temperature": 0.3,
-            },
-            timeout=25,
-        )
-        if resp.status_code != 200:
-            raise RuntimeError(f"Groq API error {resp.status_code}: {resp.text}")
-        result = resp.json()["choices"][0]["message"]["content"]
-        if not result:
-            raise RuntimeError(f"Groq devolvio contenido vacio (status {resp.status_code})")
-        return result
-    except Exception as e:
-        raise RuntimeError(f"Groq call failed: {e}")
-
-
-def _call_gemini(prompt, system_prompt):
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        return None
-    resp = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent",
-        params={"key": api_key},
-        headers={"Content-Type": "application/json"},
-        json={
-            "system_instruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192},
-            "safetySettings": [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
-            ],
-        },
-        timeout=20,
-    )
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text}")
-    data = resp.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
-        reason = data.get("promptFeedback", {}).get("blockReason", "desconocido")
-        raise RuntimeError(f"Gemini: sin candidatos (blockReason: {reason})")
-    parts = candidates[0].get("content", {}).get("parts", [])
-    if not parts:
-        finish = candidates[0].get("finishReason", "unknown")
-        raise RuntimeError(f"Gemini: sin parts en respuesta (finishReason: {finish})")
-    text = parts[0].get("text", "")
-    if not text:
-        raise RuntimeError(f"Gemini: texto vacio (finishReason: {candidates[0].get('finishReason', 'unknown')})")
-    return text
-
-
-def _call_gemini_all(prompt, system_prompt):
-    try:
-        result = _call_gemini(prompt, system_prompt)
-        if result is not None:
-            return result, None
-    except Exception as e:
-        return None, f"Gemini: {e}"
-    return None, "Gemini: no configurado (falta GEMINI_API_KEY)"
-
-
-def _call_groq_all(base_prompt):
-    """Single Groq call for all fields (under 6000 TPM)"""
-    compact_fields = """
-cliente, periodo, fecha_reporte, servicio_monitoreo,
+def _call_bedrock_all(base_prompt):
+    model_id = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20240620-v1:0")
+    compact_fields = """cliente, periodo, fecha_reporte, servicio_monitoreo,
 herramienta_1..7, datos_base, entorno,
 resumen_parrafo_1..4, analisis_comparativo, observacion_tecnica,
 comp_critico|alto|medio|bajo|info_{pasada,actual,variacion},
@@ -174,38 +99,56 @@ prioridad_1..4, servidor_estado,
 switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
 accion_semana_1..15, resultado_seguridad_1, conclusiones,
 recomendaciones (array 3), noticias_seguridad (array 3)"""
-    result = _call_groq(
-        f"""{base_prompt}
+    prompt = f"""{base_prompt}
 
-Genera UNICAMENTE un JSON valido con estos campos (objeto, NO array). Formato: {{"campo1": "valor1", "campo2": "valor2", ...}}.
+Genera un objeto JSON valido con los siguientes campos (objeto, NO array).
+Cada campo debe contener texto profesional, detallado y con datos especificos.
+
 Campos a incluir:
 {compact_fields}
 
 REGLAS:
-- Todos los campos deben tener contenido (nada vacio)
 - Sustituye ".." por numeros consecutivos (ej. herramienta_1 a herramienta_7)
-- comp_* campos son numeros enteros
-- arrays = exactamente 3 strings cada uno
-- Capitaliza correctamente
-- SOLO el JSON, sin texto antes ni despues""",
-        "Eres analista de seguridad senior. Responde UNICAMENTE con un objeto JSON valido. Ningun texto adicional. Ningun campo vacio.",
-        max_tokens=3000,
-    )
-    if not result:
-        raise RuntimeError("Groq no devolvio datos")
-    # Try direct parse first, fallback to brace extraction
+- comp_* = numeros enteros (sin comillas)
+- arrays = exactamente 3 strings descriptivos cada uno
+- Capitalizacion correcta en nombres propios y titulos
+- Parrafos completos de 2-3 oraciones como minimo
+- NUNCA campos vacios
+- SOLO el JSON, sin texto antes ni despues"""
+    client = boto3.client("bedrock-runtime")
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 4096,
+        "temperature": 0.3,
+        "system": SYSTEM_PROMPT,
+        "messages": [{"role": "user", "content": prompt}],
+    })
     try:
-        datos = _parse_json(result)
+        resp = client.invoke_model(
+            modelId=model_id,
+            contentType="application/json",
+            accept="application/json",
+            body=body,
+        )
+        result = json.loads(resp["body"].read())
+        text = result["content"][0]["text"]
+        if not text:
+            raise RuntimeError("Bedrock devolvio contenido vacio")
+    except Exception as e:
+        raise RuntimeError(f"Bedrock ({model_id}): {e}")
+
+    try:
+        datos = _parse_json(text)
     except (ValueError, json.JSONDecodeError):
-        result = result.strip()
-        brace_start = result.find('{')
+        text = text.strip()
+        brace_start = text.find('{')
         if brace_start > 0:
-            result = result[brace_start:]
-        last_brace = result.rfind('}')
+            text = text[brace_start:]
+        last_brace = text.rfind('}')
         if last_brace > 0:
-            result = result[:last_brace+1]
-        datos = _parse_json(result)
-    return datos, "groq"
+            text = text[:last_brace+1]
+        datos = _parse_json(text)
+    return datos, model_id
 
 
 def handler(event, context):
@@ -216,23 +159,9 @@ def handler(event, context):
         tenant_id = body.get("tenant_id", "tenant-unknown")
         softwares = body.get("softwares_list", "")
 
-        base_prompt = f"{contenido_reporte}\n\nINDICACIONES: {indicaciones}"
+        base_prompt = f"{contenido_reporte}\n\nINDICACIONES DEL CLIENTE: {indicaciones}"
 
-        # Try single Gemini call
-        result_all, gemini_error = _call_gemini_all(
-            f"{base_prompt}\n\nGenera JSON con los 131 campos. Ningun campo vacio. Incluye conclusiones basadas en datos. Capitaliza correctamente. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
-            SYSTEM_PROMPT,
-        )
-
-        if result_all is None:
-            # Fallback: single Groq call
-            try:
-                datos, provider = _call_groq_all(base_prompt)
-            except Exception as groq_e:
-                raise RuntimeError(f"{gemini_error}. Groq fallback: {groq_e}")
-        else:
-            datos = _parse_json(result_all)
-            provider = "gemini"
+        datos, provider = _call_bedrock_all(base_prompt)
 
         for k, v in datos.items():
             if isinstance(v, list):
@@ -243,7 +172,9 @@ def handler(event, context):
         datos["cliente"] = tenant_id
         if not datos.get("fecha_reporte"):
             from datetime import date
-            datos["fecha_reporte"] = date.today().strftime("%d de %B de %Y")
+            meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
+            hoy = date.today()
+            datos["fecha_reporte"] = f"{hoy.day} de {meses[hoy.month-1]} de {hoy.year}"
 
         for placeholder in ALL_FIELDS:
             datos.setdefault(placeholder, "")

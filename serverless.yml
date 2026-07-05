@@ -10,14 +10,22 @@ provider:
   region: us-east-1
   stage: dev
   role: arn:aws:iam::400315371118:role/LabRole
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+          Resource:
+            - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0
+            - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
     BUCKET_REPORTES: reportes-generales-${self:provider.stage}
     ANALYTICS_REAL_FUNCTION: Analytics
-    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
-    GROQ_API_KEY: ${env:GROQ_API_KEY, ''}
+    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'anthropic.claude-3-5-sonnet-20240620-v1:0'}
 
 package:
   patterns:
@@ -66,8 +74,8 @@ functions:
 
   transiaXml:
     handler: src/transia_xml.handler
-    description: Recibe datos formateados, llama a IA (Gemini o Groq), genera JSON, invoca convertir_a_docx
-    timeout: 25
+    description: Recibe datos formateados, llama a AWS Bedrock (Claude 3.5 Sonnet), genera JSON profesional, invoca convertir_a_docx
+    timeout: 30
     memorySize: 1024
 
   convertirDocx:
