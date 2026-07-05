@@ -71,7 +71,7 @@ def _invoke_convertir_docx(xml_content: str, tenant_id: str, indicaciones: str) 
 def _call_bedrock(prompt: str) -> str:
     body = {
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 8192,
+        "max_tokens": 4096,
         "temperature": 0.3,
         "messages": [{"role": "user", "content": prompt}],
     }
