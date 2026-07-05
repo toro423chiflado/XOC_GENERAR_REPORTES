@@ -17,22 +17,21 @@ provider:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
-    BUCKET_REPORTES: ${self:service}-reportes-generales-${self:provider.stage}
+    BUCKET_REPORTES: reportes-generales-${self:provider.stage}
     ANALYTICS_REAL_FUNCTION: Analytics
     GROQ_API_KEY: ${env:GROQ_API_KEY, ''}
 
 custom:
   pythonRequirements:
-    slim: true
-    layer: true
-    pythonBin: python3
+    zip: true
+    slim: false
 
 resources:
   Resources:
     ReportesBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: ${self:service}-reportes-generales-${self:provider.stage}
+        BucketName: reportes-generales-${self:provider.stage}
         PublicAccessBlockConfiguration:
           BlockPublicAcls: true
           BlockPublicPolicy: true
@@ -50,8 +49,6 @@ functions:
     description: Orquestador - recibe formulario, llama Analytics/AnalyticsMock, formatea datos, invoca Transia_XML
     timeout: 60
     memorySize: 256
-    layers:
-      - { Ref: PythonRequirementsLambdaLayer }
     events:
       - http:
           path: /reporte/generar
@@ -67,19 +64,15 @@ functions:
 
   transiaXml:
     handler: src/transia_xml.handler
-    description: Recibe datos formateados, llama a Groq (Llama 3 70B), genera XML, invoca convertir_a_docx
+    description: Recibe datos formateados, llama a Groq (Llama 3.1 8B), genera XML, invoca convertir_a_docx
     timeout: 120
     memorySize: 512
-    layers:
-      - { Ref: PythonRequirementsLambdaLayer }
 
   convertirDocx:
     handler: src/convertir_a_docx.handler
     description: Recibe XML desde transiaXml, convierte a DOCX con python-docx, sube a S3
     timeout: 60
     memorySize: 512
-    layers:
-      - { Ref: PythonRequirementsLambdaLayer }
 
 outputs:
   ApiUrl:
