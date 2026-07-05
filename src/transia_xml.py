@@ -116,7 +116,7 @@ def _call_gemini(prompt: str, system_prompt: str) -> str:
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY no configurada")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
     data = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"parts": [{"text": prompt}]}],
