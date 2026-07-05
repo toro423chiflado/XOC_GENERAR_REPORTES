@@ -25,6 +25,7 @@ custom:
   pythonRequirements:
     zip: true
     slim: false
+    pythonBin: python3
 
 resources:
   Resources:
