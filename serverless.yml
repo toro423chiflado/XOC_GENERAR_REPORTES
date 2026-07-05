@@ -1,5 +1,7 @@
 service: xoc-reportes
 
+org: torochiflado
+
 frameworkVersion: "3"
 
 plugins:
