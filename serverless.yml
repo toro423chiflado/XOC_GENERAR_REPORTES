@@ -23,7 +23,7 @@ provider:
 
 custom:
   pythonRequirements:
-    zip: true
+    layer: true
     slim: false
     pythonBin: python3
 
