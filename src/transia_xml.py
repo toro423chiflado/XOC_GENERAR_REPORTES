@@ -51,80 +51,53 @@ ALL_FIELDS = [
 SYSTEM_PROMPT = """Eres un analista de seguridad senior generando un reporte ejecutivo en formato DOCX.
 Debes generar SOLO un objeto JSON valido, sin markdown, sin explicaciones, sin texto adicional.
 
-El JSON debe contener todos los campos listados abajo. Cada campo se inyectara directamente en una plantilla DOCX profesional con tablas, imagenes y formato preservado.
+El JSON sera inyectado directamente en una plantilla DOCX profesional. Usa los DATOS DEL REPORTE provistos para generar contenido detallado, tecnico y con metricas reales.
 
-ESTRUCTURA DEL REPORTE (129 campos):
+CAMPOS REQUERIDOS (todos string a menos que se indique):
 
-=== 1. DATOS GENERALES ===
-- cliente: Nombre del cliente
-- periodo: Periodo del reporte (ej. "01/07/2026 - 05/07/2026")
-- fecha_reporte: Fecha de generacion (ej. "05 de Julio de 2026")
-  - servicio_monitoreo: Descripcion del servicio de monitoreo
-- herramienta_1..7: Listar cada herramienta de seguridad usada con version
+=== DATOS GENERALES ===
+cliente, periodo, fecha_reporte, servicio_monitoreo,
+herramienta_1..7, datos_base, entorno
 
-=== 2. DATOS BASE Y ENTORNO ===
-- datos_base: Descripcion de la infraestructura base monitoreada (IPs, hosts, activos totales)
-- entorno: Descripcion del entorno (nube, on-premise, hibrido)
+=== RESUMEN EJECUTIVO ===
+resumen_parrafo_1..4 (4 parrafos detallados)
 
-=== 3. RESUMEN EJECUTIVO (4 parrafos) ===
-- resumen_parrafo_1..4: Resumen ejecutivo en 4 parrafos. Incluir metricas clave, tendencias, estado general
+=== ANALISIS COMPARATIVO ===
+analisis_comparativo (texto analizando tabla de vulnerabilidades),
+observacion_tecnica
 
-=== 4. ANALISIS COMPARATIVO ===
-- analisis_comparativo: Texto analizando la tabla comparativa de vulnerabilidades. Mencionar variaciones
-- observacion_tecnica: Observacion tecnica relevante sobre los datos
+=== TABLA COMPARATIVA (valores numericos enteros) ===
+comp_critico_{pasada,actual,variacion},
+comp_alto_{pasada,actual,variacion},
+comp_medio_{pasada,actual,variacion},
+comp_bajo_{pasada,actual,variacion},
+comp_info_{pasada,actual,variacion}
 
-=== 5. TABLA COMPARATIVA (severidades) ===
-- comp_{critico,alto,medio,bajo,info}_{pasada,actual,variacion}: Valores numericos enteros
+=== RESULTADOS (7) Y ACCIONES (6) ===
+resultado_1..7, accion_1..6, requerimiento_1..8
 
-=== 6. RESULTADOS OBTENIDOS (7 items) ===
-- resultado_1..7: Hallazgos especificos con detalle tecnico, impacto y evidencia
+=== HALLAZGOS POR DOMINIO ===
+hallazgo_web_1..6, hallazgo_ips_1..14, hallazgo_fw_1..6
 
-=== 7. ACCIONES (6 items) ===
-- accion_1..6: Acciones correctivas con responsable y plazo
+=== SERVIDORES ===
+servidor_intro, servidor_resumen, servidor_genesys,
+serv_activos_{trujillo,genesys,lima,canada},
+serv_hallazgos_{trujillo,genesys,lima,canada},
+serv_riesgo_{trujillo,genesys,lima,canada},
+servidor_trujillo_1..3, servidor_genesys_2, servidor_lima, servidor_canada_1..2,
+prioridad_1..4, servidor_estado
 
-=== 8. REQUERIMIENTOS (8 items) ===
-- requerimiento_1..8: Requerimientos de seguridad
-
-=== 9. HALLAZGOS POR DOMINIO ===
-- hallazgo_web_1..6: Hallazgos de web externo con detalle tecnico
-- hallazgo_ips_1..14: Hallazgos de IPs publicas con detalle
-- hallazgo_fw_1..6: Hallazgos de firewall con detalle
-
-=== 10. SERVIDORES ===
-- servidor_intro: Parrafo introductorio sobre el estado de servidores
-- servidor_resumen: Resumen del estado general de servidores
-- servidor_genesys: Estado especifico de IPS Genesys
-- serv_activos_{trujillo,genesys,lima,canada}: Numeros de activos por sede
-- serv_hallazgos_{trujillo,genesys,lima,canada}: Hallazgos encontrados por sede
-- serv_riesgo_{trujillo,genesys,lima,canada}: Foco de riesgo principal por sede
-- servidor_trujillo_1..3: Detalles de servidores Trujillo
-- servidor_genesys_2: Detalle adicional Genesys
-- servidor_lima: Detalle servidores Lima
-- servidor_canada_1..2: Detalles servidores Canada
-- prioridad_1..4: Prioridades tecnicas identificadas
-- servidor_estado: Estado general de la infraestructura de servidores
-
-=== 11. INFRAESTRUCTURA DE RED ===
-- switches_parrafo_1..3: Estado de switches
-- wifi_texto: Estado de redes WiFi
-- desktops_parrafo_1..2: Estado de desktops
-- ot_iot_texto: Estado de infraestructura OT/IoT
-
-=== 12. ACCIONES SEMANALES (15 items) ===
-- accion_semana_1..15: Acciones trabajadas detalladas cronologicamente
-
-=== 13. RESULTADOS Y RECOMENDACIONES ===
-- resultado_seguridad_1: Resultado general de seguridad
-- recomendaciones: Array de 3 strings con recomendaciones clave
-- noticias_seguridad: Array de 3 strings con noticias de seguridad relevantes
+=== INFRAESTRUCTURA ===
+switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
+accion_semana_1..15, resultado_seguridad_1,
+recomendaciones (array 3 items), noticias_seguridad (array 3 items)
 
 REGLAS:
-- Usa texto profesional, detallado y concreto con numeros y metricas reales de los DATOS DEL REPORTE
-- Todos los campos son strings EXCEPTO recomendaciones y noticias_seguridad que son arrays de 3 strings
-- Los campos tipo array deben producirse con guion y texto descriptivo (seran convertidos a lista con viñetas)
-- No escapes caracteres HTML
-- No incluyas campos adicionales fuera del schema
-- Responde UNICAMENTE con el JSON sin ningun otro texto"""
+- Texto profesional con numeros y metricas extraidas de los DATOS DEL REPORTE
+- Arrays se convierten a lista con vinetas
+- Sin HTML escaping
+- Sin campos adicionales
+- SOLO JSON"""
 
 
 def _invoke_convertir_docx(datos_json: dict, tenant_id: str) -> dict:
@@ -138,36 +111,31 @@ def _invoke_convertir_docx(datos_json: dict, tenant_id: str) -> dict:
     return json.loads(resp["Payload"].read())
 
 
-def _call_groq(prompt: str, system_prompt: str) -> str:
-    api_key = os.environ.get("GROQ_API_KEY", "")
+def _call_gemini(prompt: str, system_prompt: str) -> str:
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        raise RuntimeError("GROQ_API_KEY no configurada")
+        raise RuntimeError("GEMINI_API_KEY no configurada")
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     data = {
-        "model": "llama-3.1-8b-instant",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": 8192,
-        "temperature": 0.3,
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 8192,
+        },
     }
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers=headers,
-        json=data,
-        timeout=120,
-    )
+    response = requests.post(url, headers={"Content-Type": "application/json"}, json=data, timeout=120)
 
     if response.status_code != 200:
-        error_detail = response.text
-        raise RuntimeError(f"Groq API error {response.status_code}: {error_detail}")
+        raise RuntimeError(f"Gemini API error {response.status_code}: {response.text}")
 
-    return response.json()["choices"][0]["message"]["content"]
+    result = response.json()
+    candidates = result.get("candidates", [])
+    if not candidates:
+        raise RuntimeError(f"Gemini: sin candidatos en respuesta: {result}")
+
+    return candidates[0]["content"]["parts"][0]["text"]
 
 
 def handler(event, context):
@@ -189,7 +157,7 @@ INDICACIONES ADICIONALES:
 
 Genera el JSON completo del reporte."""
 
-        json_str = _call_groq(prompt, SYSTEM_PROMPT)
+        json_str = _call_gemini(prompt, SYSTEM_PROMPT)
 
         json_str = json_str.strip()
         if json_str.startswith("```json"):

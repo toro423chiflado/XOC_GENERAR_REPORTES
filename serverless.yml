@@ -16,6 +16,7 @@ provider:
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
     BUCKET_REPORTES: reportes-generales-${self:provider.stage}
     ANALYTICS_REAL_FUNCTION: Analytics
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
     GROQ_API_KEY: ${env:GROQ_API_KEY, ''}
 
 package:
