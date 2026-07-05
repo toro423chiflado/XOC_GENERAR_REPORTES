@@ -75,7 +75,7 @@ def _call_groq(prompt: str, system_prompt: str) -> str:
         "Content-Type": "application/json",
     }
     data = {
-        "model": "mixtral-8x7b-32768",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
