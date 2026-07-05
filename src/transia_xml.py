@@ -96,33 +96,19 @@ def _call_gemini(prompt, system_prompt):
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return None
+    model = "gemini-2.5-flash"
     resp = requests.post(
-        "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent",
-        params={"key": api_key},
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
         headers={"Content-Type": "application/json"},
         json={
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192},
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 65536},
         },
         timeout=120,
     )
     if resp.status_code != 200:
-        detail = resp.text
-        # v1 fallback to v1beta if model not found
-        if "not found" in detail:
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key={api_key}",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "system_instruction": {"parts": [{"text": system_prompt}]},
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192},
-                },
-                timeout=120,
-            )
-        if resp.status_code != 200:
-            raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text}")
+        raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text}")
     candidates = resp.json().get("candidates", [])
     if not candidates:
         raise RuntimeError("Gemini: sin candidatos")
