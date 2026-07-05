@@ -1,11 +1,13 @@
 import json
 import os
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from uuid import uuid4
 
 import boto3
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "_vendor"))
 
 try:
     from docx import Document

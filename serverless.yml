@@ -4,9 +4,6 @@ org: torochiflado
 
 frameworkVersion: "3"
 
-plugins:
-  - serverless-python-requirements
-
 provider:
   name: aws
   runtime: python3.11
@@ -21,13 +18,13 @@ provider:
     ANALYTICS_REAL_FUNCTION: Analytics
     GROQ_API_KEY: ${env:GROQ_API_KEY, ''}
 
-custom:
-  pythonRequirements:
-    layer: true
-    slim: false
-    pythonBin: python3
-    useDownloadCache: false
-    useStaticCache: false
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!package-lock.json'
+    - '!package.json'
+    - src/**
+    - _vendor/**
 
 resources:
   Resources:
@@ -70,8 +67,6 @@ functions:
     description: Recibe datos formateados, llama a Groq (Llama 3.1 8B), genera XML, invoca convertir_a_docx
     timeout: 120
     memorySize: 512
-    layers:
-      - { Ref: PythonRequirementsLambdaLayer }
 
   convertirDocx:
     handler: src/convertir_a_docx.handler

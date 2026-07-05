@@ -1,9 +1,7 @@
 {
   "name": "xoc-reportes",
   "version": "1.0.0",
-  "description": "Servicio de generacion de reportes XOC con AWS Lambda, Bedrock y S3",
-  "dependencies": {
-    "serverless-python-requirements": "^6.1.0"
-  },
+  "description": "Servicio de generacion de reportes XOC con AWS Lambda, S3 y Groq",
+  "dependencies": {},
   "devDependencies": {}
 }
