@@ -118,15 +118,30 @@ def _call_gemini(prompt, system_prompt):
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192},
+            "safetySettings": [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+            ],
         },
         timeout=20,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text}")
-    candidates = resp.json().get("candidates", [])
+    data = resp.json()
+    candidates = data.get("candidates", [])
     if not candidates:
-        raise RuntimeError("Gemini: sin candidatos")
-    return candidates[0]["content"]["parts"][0]["text"]
+        reason = data.get("promptFeedback", {}).get("blockReason", "desconocido")
+        raise RuntimeError(f"Gemini: sin candidatos (blockReason: {reason})")
+    parts = candidates[0].get("content", {}).get("parts", [])
+    if not parts:
+        finish = candidates[0].get("finishReason", "unknown")
+        raise RuntimeError(f"Gemini: sin parts en respuesta (finishReason: {finish})")
+    text = parts[0].get("text", "")
+    if not text:
+        raise RuntimeError(f"Gemini: texto vacio (finishReason: {candidates[0].get('finishReason', 'unknown')})")
+    return text
 
 
 def _call_gemini_all(prompt, system_prompt):
@@ -213,5 +228,5 @@ def handler(event, context):
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-            "body": json.dumps({"success": False, "error": str(e)}),
+            "body": json.dumps({"success": False, "error": str(e), "type": type(e).__name__}),
         }
