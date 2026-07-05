@@ -18,8 +18,8 @@ provider:
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
     BUCKET_REPORTES: ${self:service}-reportes-generales-${self:provider.stage}
-    BEDROCK_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
     ANALYTICS_REAL_FUNCTION: Analytics
+    GROQ_API_KEY: ${env:GROQ_API_KEY, ''}
 
 custom:
   pythonRequirements:
@@ -67,7 +67,7 @@ functions:
 
   transiaXml:
     handler: src/transia_xml.handler
-    description: Recibe datos formateados + template, llama a Bedrock (Claude 3 Sonnet), genera XML, invoca convertir_a_docx
+    description: Recibe datos formateados, llama a Groq (Llama 3 70B), genera XML, invoca convertir_a_docx
     timeout: 120
     memorySize: 512
     layers:

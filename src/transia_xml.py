@@ -3,11 +3,9 @@ import os
 import uuid
 
 import boto3
+import requests
 
-bedrock = boto3.client("bedrock-runtime")
 lambda_client = boto3.client("lambda")
-
-MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240301-v1:0")
 CONVERTIR_DOCX_FN = os.environ.get("CONVERTIR_DOCX_FUNCTION", "")
 
 XML_REPORT_SCHEMA = """<?xml version="1.0" encoding="UTF-8"?>
@@ -40,7 +38,6 @@ XML_REPORT_SCHEMA = """<?xml version="1.0" encoding="UTF-8"?>
   </recomendaciones>
 </reporte>"""
 
-
 SYSTEM_PROMPT = """Eres un generador de reportes de seguridad en formato XML.
 Debes generar SOLO XML valido, sin texto adicional, sin markdown, sin explicaciones.
 El XML debe seguir ESTRICTAMENTE este schema:
@@ -68,21 +65,31 @@ def _invoke_convertir_docx(xml_content: str, tenant_id: str, indicaciones: str) 
     return json.loads(resp["Payload"].read())
 
 
-def _call_bedrock(prompt: str) -> str:
-    body = {
-        "anthropic_version": "bedrock-2023-05-31",
+def _call_groq(prompt: str, system_prompt: str) -> str:
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY no configurada")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "model": "llama3-70b-8192",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
         "max_tokens": 4096,
         "temperature": 0.3,
-        "messages": [{"role": "user", "content": prompt}],
     }
-    response = bedrock.invoke_model(
-        modelId=MODEL_ID,
-        contentType="application/json",
-        accept="application/json",
-        body=json.dumps(body),
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers=headers,
+        json=data,
     )
-    result = json.loads(response["body"].read())
-    return result["content"][0]["text"]
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]
 
 
 def handler(event, context):
@@ -111,7 +118,7 @@ NO incluyas texto antes ni despues del XML.
 NO uses ```xml ni ```.
 SOLO el XML puro."""
 
-        xml_generado = _call_bedrock(prompt)
+        xml_generado = _call_groq(prompt, SYSTEM_PROMPT.format(schema=XML_REPORT_SCHEMA))
 
         xml_generado = xml_generado.strip()
         if xml_generado.startswith("```xml"):
