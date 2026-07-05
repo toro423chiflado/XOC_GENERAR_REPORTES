@@ -160,14 +160,51 @@ def _call_gemini_all(prompt, system_prompt):
 
 def _call_groq_all(base_prompt):
     """Single Groq call for all fields (under 6000 TPM)"""
+    compact_fields = """
+cliente, periodo, fecha_reporte, servicio_monitoreo,
+herramienta_1..7, datos_base, entorno,
+resumen_parrafo_1..4, analisis_comparativo, observacion_tecnica,
+comp_critico|alto|medio|bajo|info_{pasada,actual,variacion},
+resultado_1..7, accion_1..6, requerimiento_1..8,
+hallazgo_web_1..6, hallazgo_ips_1..14, hallazgo_fw_1..6,
+servidor_intro|resumen|genesys,
+serv_activos|hallazgos|riesgo_{trujillo,genesys,lima,canada},
+servidor_trujillo_1..3|genesys_2|lima|canada_1..2,
+prioridad_1..4, servidor_estado,
+switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
+accion_semana_1..15, resultado_seguridad_1, conclusiones,
+recomendaciones (array 3), noticias_seguridad (array 3)"""
     result = _call_groq(
-        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con TODOS estos campos. Ningun campo vacio. Incluye conclusiones:\n{json.dumps(ALL_FIELDS)}\n\ncomp_* = numeros, arrays = 3 strings, capitalizacion correcta, datos concretos del reporte.",
-        "Eres analista de seguridad senior. Tu unica respuesta debe ser un JSON valido con todos los campos. Texto profesional, metricas reales, ninguna entrada vacia.",
+        f"""{base_prompt}
+
+Genera UNICAMENTE un JSON valido con estos campos (objeto, NO array). Formato: {{"campo1": "valor1", "campo2": "valor2", ...}}.
+Campos a incluir:
+{compact_fields}
+
+REGLAS:
+- Todos los campos deben tener contenido (nada vacio)
+- Sustituye ".." por numeros consecutivos (ej. herramienta_1 a herramienta_7)
+- comp_* campos son numeros enteros
+- arrays = exactamente 3 strings cada uno
+- Capitaliza correctamente
+- SOLO el JSON, sin texto antes ni despues""",
+        "Eres analista de seguridad senior. Responde UNICAMENTE con un objeto JSON valido. Ningun texto adicional. Ningun campo vacio.",
         max_tokens=3000,
     )
     if not result:
         raise RuntimeError("Groq no devolvio datos")
-    datos = _parse_json(result)
+    # Try direct parse first, fallback to brace extraction
+    try:
+        datos = _parse_json(result)
+    except (ValueError, json.JSONDecodeError):
+        result = result.strip()
+        brace_start = result.find('{')
+        if brace_start > 0:
+            result = result[brace_start:]
+        last_brace = result.rfind('}')
+        if last_brace > 0:
+            result = result[:last_brace+1]
+        datos = _parse_json(result)
     return datos, "groq"
 
 
