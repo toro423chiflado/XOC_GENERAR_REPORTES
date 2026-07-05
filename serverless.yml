@@ -12,7 +12,7 @@ provider:
   runtime: python3.11
   region: us-east-1
   stage: dev
-  role: arn:aws:iam::400315371118:role/labrole
+  role: arn:aws:iam::400315371118:role/LabRole
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
