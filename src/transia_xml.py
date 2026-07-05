@@ -10,59 +10,53 @@ import requests
 lambda_client = boto3.client("lambda")
 CONVERTIR_DOCX_FN = os.environ.get("CONVERTIR_DOCX_FUNCTION", "")
 
-XML_REPORT_SCHEMA = """<?xml version="1.0" encoding="UTF-8"?>
-<reporte>
-  <metadata>
-    <titulo>STRING</titulo>
-    <fecha_generacion>ISO8601</fecha_generacion>
-    <tenant_id>STRING</tenant_id>
-    <softwares_incluidos>LISTA_COMA</softwares_incluidos>
-  </metadata>
-  <resumen_ejecutivo>STRING</resumen_ejecutivo>
-  <secciones>
-    <seccion>
-      <nombre>NOMBRE_SOFTWARE</nombre>
-      <tipo>vulnerabilidad|monitoreo|siem|disponibilidad</tipo>
-      <contenido>
-        <parrafo>...</parrafo>
-        <tabla>
-          <encabezados><encabezado>...</encabezado></encabezados>
-          <filas>
-            <fila><celda>...</celda></fila>
-          </filas>
-        </tabla>
-      </contenido>
-    </seccion>
-  </secciones>
-  <conclusiones>STRING</conclusiones>
-  <recomendaciones>
-    <recomendacion>...</recomendacion>
-  </recomendaciones>
-</reporte>"""
+JSON_SCHEMA = """{
+  "cliente": "Nombre del cliente",
+  "periodo": "Periodo del reporte",
+  "fecha_reporte": "Fecha de emision",
+  "herramientas": "Descripcion de herramientas usadas",
+  "entorno": "Descripcion del entorno monitoreado",
+  "resumen_ejecutivo": "Resumen ejecutivo completo",
+  "analisis_comparativo": "Analisis comparativo de vulnerabilidades",
+  "resultados_obtenidos": "Resultados obtenidos en la semana",
+  "proximas_acciones": "Proximas acciones a realizar",
+  "requerimiento": "Requerimiento del cliente",
+  "hallazgos_web_externo": "Hallazgos de dominio web externo",
+  "hallazgos_ips_publicas": "Hallazgos de IPs publicas",
+  "hallazgos_fw_teletrabajo": "Hallazgos de firewall y teletrabajo",
+  "hallazgos_servidores": "Hallazgos de servidores",
+  "estado_switches": "Estado de switches",
+  "estado_wifi": "Estado de WiFi",
+  "estado_desktops": "Estado de desktops",
+  "estado_ot_iot": "Estado de OT/IoT",
+  "acciones_semana": "Acciones trabajadas durante la semana",
+  "resultados_seguridad": "Resultados de seguridad obtenidos",
+  "recomendaciones": ["Recomendacion 1", "Recomendacion 2"],
+  "noticias_seguridad": ["Noticia 1", "Noticia 2"]
+}"""
 
-SYSTEM_PROMPT = """Eres un generador de reportes de seguridad en formato XML.
-Debes generar SOLO XML valido, sin texto adicional, sin markdown, sin explicaciones.
-El XML debe seguir ESTRICTAMENTE este schema:
+SYSTEM_PROMPT = """Eres un analista de seguridad que genera reportes ejecutivos.
+Debes generar SOLO un objeto JSON valido, sin texto adicional, sin markdown, sin explicaciones.
+El JSON debe seguir ESTRICTAMENTE este schema:
 
-{schema}
+{json_schema}
 
 Reglas:
-- Usa tablas dentro de <contenido> cuando haya datos numericos (vulnerabilidades, hosts, etc).
-- Cada seccion de software debe tener parrafos descriptivos.
-- Incluye datos concretos, no textos genericos.
-- Las recomendaciones deben ser accionables y especificas.
-- No agregues CDATA, solo texto plano en los nodos.
-- No escapes HTML, solo texto plano.
-- Responde UNICAMENTE con el XML, sin ningun otro texto."""
+- Usa texto profesional y conciso.
+- Incluye datos concretos con numeros y metricas cuando esten disponibles.
+- Las listas (recomendaciones, noticias) deben tener al menos 3 elementos cada una.
+- No escapes caracteres HTML.
+- No incluyas campos adicionales fuera del schema.
+- Responde UNICAMENTE con el JSON, sin ningun otro texto."""
 
 
-def _invoke_convertir_docx(xml_content: str, tenant_id: str, indicaciones: str) -> dict:
+def _invoke_convertir_docx(datos_json: dict, tenant_id: str) -> dict:
     if not CONVERTIR_DOCX_FN:
         raise RuntimeError("CONVERTIR_DOCX_FUNCTION no configurada")
     resp = lambda_client.invoke(
         FunctionName=CONVERTIR_DOCX_FN,
         InvocationType="RequestResponse",
-        Payload=json.dumps({"xml": xml_content, "tenant_id": tenant_id, "indicaciones": indicaciones}),
+        Payload=json.dumps({"datos": datos_json, "tenant_id": tenant_id}),
     )
     return json.loads(resp["Payload"].read())
 
@@ -82,14 +76,14 @@ def _call_groq(prompt: str, system_prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 4096,
+        "max_tokens": 8192,
         "temperature": 0.3,
     }
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers=headers,
         json=data,
-        timeout=30,
+        timeout=60,
     )
 
     if response.status_code != 200:
@@ -109,8 +103,9 @@ def handler(event, context):
         contenido_reporte = body.get("contenido_reporte", "")
         indicaciones = body.get("indicaciones", "")
         tenant_id = body.get("tenant_id", "tenant-unknown")
+        softwares = body.get("softwares_list", "")
 
-        prompt = f"""{SYSTEM_PROMPT.format(schema=XML_REPORT_SCHEMA)}
+        prompt = f"""{SYSTEM_PROMPT.format(json_schema=JSON_SCHEMA)}
 
 DATOS DEL REPORTE:
 ------------------
@@ -120,26 +115,27 @@ INDICACIONES ADICIONALES:
 -------------------------
 {indicaciones}
 
-Genera el XML del reporte siguiendo estrictamente el schema especificado.
-NO incluyas texto antes ni despues del XML.
-NO uses ```xml ni ```.
-SOLO el XML puro."""
+Genera el JSON del reporte siguiendo estrictamente el schema especificado.
+NO incluyas texto antes ni despues del JSON.
+NO uses ```json ni ```.
+SOLO el JSON puro."""
 
-        xml_generado = _call_groq(prompt, SYSTEM_PROMPT.format(schema=XML_REPORT_SCHEMA))
+        json_str = _call_groq(prompt, SYSTEM_PROMPT.format(json_schema=JSON_SCHEMA))
 
-        xml_generado = xml_generado.strip()
-        if xml_generado.startswith("```xml"):
-            xml_generado = xml_generado[6:]
-        if xml_generado.startswith("```"):
-            xml_generado = xml_generado[3:]
-        if xml_generado.endswith("```"):
-            xml_generado = xml_generado[:-3]
-        xml_generado = xml_generado.strip()
+        json_str = json_str.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        json_str = json_str.strip()
 
-        if not xml_generado.startswith("<?xml"):
-            xml_generado = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_generado
+        datos_json = json.loads(json_str)
+        datos_json["softwares_incluidos"] = softwares
+        datos_json["tenant_id"] = tenant_id
 
-        resultado_docx = _invoke_convertir_docx(xml_generado, tenant_id, indicaciones)
+        resultado_docx = _invoke_convertir_docx(datos_json, tenant_id)
 
         return {
             "statusCode": 200,
@@ -147,7 +143,7 @@ SOLO el XML puro."""
             "body": json.dumps(
                 {
                     "success": True,
-                    "xml_generado": xml_generado,
+                    "datos_json": datos_json,
                     "documento_docx": resultado_docx.get("body", resultado_docx),
                 }
             ),

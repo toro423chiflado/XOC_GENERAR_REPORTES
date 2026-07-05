@@ -133,14 +133,14 @@ def _invoke_analytics(softwares: dict, tenant_id: str, indicaciones: str) -> dic
         return {"tenant_id": tenant_id, "data": {}, "generated_at": datetime.utcnow().isoformat(), "fallback": True, "error": str(e)}
 
 
-def _invoke_transia_xml(contenido_reporte: str, indicaciones: str, tenant_id: str) -> dict:
+def _invoke_transia_xml(contenido_reporte: str, indicaciones: str, tenant_id: str, softwares_list: str = "") -> dict:
     nombre_funcion = os.environ.get("TRANSIA_XML_FUNCTION")
     if not nombre_funcion:
         raise RuntimeError("TRANSIA_XML_FUNCTION no configurada")
     resp = lambda_client.invoke(
         FunctionName=nombre_funcion,
         InvocationType="RequestResponse",
-        Payload=json.dumps({"contenido_reporte": contenido_reporte, "indicaciones": indicaciones, "tenant_id": tenant_id}),
+        Payload=json.dumps({"contenido_reporte": contenido_reporte, "indicaciones": indicaciones, "tenant_id": tenant_id, "softwares_list": softwares_list}),
     )
     return json.loads(resp["Payload"].read())
 
@@ -191,7 +191,7 @@ def handler(event, context):
             recomendaciones="- Revisar vulnerabilidades criticas.\n- Verificar estado de agentes.\n- Validar monitoreo continuo.",
         )
 
-        resultado = _invoke_transia_xml(contenido_reporte, indicaciones, tenant_id)
+        resultado = _invoke_transia_xml(contenido_reporte, indicaciones, tenant_id, sw_list)
 
         return {
             "statusCode": 200,
