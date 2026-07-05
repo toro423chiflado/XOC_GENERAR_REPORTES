@@ -39,13 +39,20 @@ ALL_FIELDS = [
     "accion_semana_1","accion_semana_2","accion_semana_3","accion_semana_4","accion_semana_5",
     "accion_semana_6","accion_semana_7","accion_semana_8","accion_semana_9","accion_semana_10",
     "accion_semana_11","accion_semana_12","accion_semana_13","accion_semana_14","accion_semana_15",
-    "resultado_seguridad_1","recomendaciones","noticias_seguridad",
+    "resultado_seguridad_1","recomendaciones","noticias_seguridad","conclusiones",
 ]
 
 
-SYSTEM_PROMPT = """Eres analista de seguridad senior. Genera SOLO JSON valido (sin markdown, sin texto extra) con todos los campos listados. Usa texto profesional y conciso con metricas de los datos del reporte.
+SYSTEM_PROMPT = """Eres analista de seguridad senior. Genera SOLO JSON valido (sin markdown, sin texto extra).
 
-CAMPOS (129 total):
+REGLAS ESTRICTAS:
+1. Todos los campos deben tener contenido relevante y especifico (nunca vacio)
+2. Capitalizacion correcta en titulos y texto (mayusculas donde corresponde)
+3. Incluye metricas, numeros y datos concretos de los DATOS DEL REPORTE
+4. Incluye conclusiones claras basadas en los hallazgos
+5. Texto profesional, detallado y ejecutivo
+
+CAMPOS (131 total):
 cliente, periodo, fecha_reporte, servicio_monitoreo,
 herramienta_1..7, datos_base, entorno,
 resumen_parrafo_1..4, analisis_comparativo, observacion_tecnica,
@@ -57,7 +64,7 @@ serv_activos|hallazgos|riesgo_{trujillo,genesys,lima,canada},
 servidor_trujillo_1..3|genesys_2|lima|canada_1..2,
 prioridad_1..4, servidor_estado,
 switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
-accion_semana_1..15, resultado_seguridad_1,
+accion_semana_1..15, resultado_seguridad_1, conclusiones,
 recomendaciones (array 3), noticias_seguridad (array 3)"""
 
 
@@ -154,8 +161,8 @@ def _call_gemini_all(prompt, system_prompt):
 def _call_groq_all(base_prompt):
     """Single Groq call for all fields (under 6000 TPM)"""
     result = _call_groq(
-        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con TODOS estos campos:\n{json.dumps(ALL_FIELDS)}\n\ncomp_* = numeros, arrays = 3 strings, resto = texto descriptivo. Solo JSON.",
-        "Eres analista de seguridad senior. Tu unica respuesta debe ser un JSON valido con todos los campos.",
+        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con TODOS estos campos. Ningun campo vacio. Incluye conclusiones:\n{json.dumps(ALL_FIELDS)}\n\ncomp_* = numeros, arrays = 3 strings, capitalizacion correcta, datos concretos del reporte.",
+        "Eres analista de seguridad senior. Tu unica respuesta debe ser un JSON valido con todos los campos. Texto profesional, metricas reales, ninguna entrada vacia.",
         max_tokens=3000,
     )
     if not result:
@@ -176,7 +183,7 @@ def handler(event, context):
 
         # Try single Gemini call
         result_all, gemini_error = _call_gemini_all(
-            f"{base_prompt}\n\nGenera JSON con TODOS los 129 campos listados. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
+            f"{base_prompt}\n\nGenera JSON con los 131 campos. Ningun campo vacio. Incluye conclusiones basadas en datos. Capitaliza correctamente. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
             SYSTEM_PROMPT,
         )
 
@@ -196,6 +203,10 @@ def handler(event, context):
 
         datos["softwares_incluidos"] = softwares
         datos["tenant_id"] = tenant_id
+        datos["cliente"] = tenant_id
+        if not datos.get("fecha_reporte"):
+            from datetime import date
+            datos["fecha_reporte"] = date.today().strftime("%d de %B de %Y")
 
         for placeholder in ALL_FIELDS:
             datos.setdefault(placeholder, "")
