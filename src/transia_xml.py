@@ -10,28 +10,7 @@ import requests
 lambda_client = boto3.client("lambda")
 CONVERTIR_DOCX_FN = os.environ.get("CONVERTIR_DOCX_FUNCTION", "")
 
-JSON_SCHEMA = """
-Fields (all string unless noted):
-cliente, periodo, fecha_reporte, servicio_monitoreo,
-herramienta_1..7, datos_base, entorno,
-resumen_parrafo_1..4, analisis_comparativo, observacion_tecnica,
-comp_critico_{pasada,actual,variacion}, comp_alto_{pasada,actual,variacion},
-comp_medio_{pasada,actual,variacion}, comp_bajo_{pasada,actual,variacion},
-comp_info_{pasada,actual,variacion},
-resultado_1..7, accion_1..6, requerimiento_1..8,
-hallazgo_web_1..6, hallazgo_ips_1..14, hallazgo_fw_1..6,
-servidor_intro, servidor_resumen, servidor_genesys, servidor_estado,
-serv_activos_{trujillo,genesys,lima,canada},
-serv_hallazgos_{trujillo,genesys,lima,canada},
-serv_riesgo_{trujillo,genesys,lima,canada},
-servidor_trujillo_1..3, servidor_genesys_2, servidor_lima, servidor_canada_1..2,
-prioridad_1..4,
-switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
-accion_semana_1..15, resultado_seguridad_1,
-recomendaciones (array of 3 strings), noticias_seguridad (array of 3 strings)
-"""
-
-ALL_FIELDS = {
+ALL_FIELDS = [
     "cliente", "periodo", "fecha_reporte", "servicio_monitoreo",
     "herramienta_1", "herramienta_2", "herramienta_3", "herramienta_4",
     "herramienta_5", "herramienta_6", "herramienta_7",
@@ -67,21 +46,85 @@ ALL_FIELDS = {
     "accion_semana_11", "accion_semana_12", "accion_semana_13", "accion_semana_14", "accion_semana_15",
     "resultado_seguridad_1",
     "recomendaciones", "noticias_seguridad",
-}
+]
 
-SYSTEM_PROMPT = """Eres un analista de seguridad que genera reportes ejecutivos.
-Debes generar SOLO un objeto JSON valido, sin texto adicional, sin markdown, sin explicaciones.
-El JSON debe seguir ESTRICTAMENTE este schema:
+SYSTEM_PROMPT = """Eres un analista de seguridad senior generando un reporte ejecutivo en formato DOCX.
+Debes generar SOLO un objeto JSON valido, sin markdown, sin explicaciones, sin texto adicional.
 
-{json_schema}
+El JSON debe contener todos los campos listados abajo. Cada campo se inyectara directamente en una plantilla DOCX profesional con tablas, imagenes y formato preservado.
 
-Reglas:
-- Usa texto profesional y conciso.
-- Incluye datos concretos con numeros y metricas cuando esten disponibles.
-- Las listas (recomendaciones, noticias) deben tener al menos 3 elementos cada una.
-- No escapes caracteres HTML.
-- No incluyas campos adicionales fuera del schema.
-- Responde UNICAMENTE con el JSON, sin ningun otro texto."""
+ESTRUCTURA DEL REPORTE (129 campos):
+
+=== 1. DATOS GENERALES ===
+- cliente: Nombre del cliente
+- periodo: Periodo del reporte (ej. "01/07/2026 - 05/07/2026")
+- fecha_reporte: Fecha de generacion (ej. "05 de Julio de 2026")
+  - servicio_monitoreo: Descripcion del servicio de monitoreo
+- herramienta_1..7: Listar cada herramienta de seguridad usada con version
+
+=== 2. DATOS BASE Y ENTORNO ===
+- datos_base: Descripcion de la infraestructura base monitoreada (IPs, hosts, activos totales)
+- entorno: Descripcion del entorno (nube, on-premise, hibrido)
+
+=== 3. RESUMEN EJECUTIVO (4 parrafos) ===
+- resumen_parrafo_1..4: Resumen ejecutivo en 4 parrafos. Incluir metricas clave, tendencias, estado general
+
+=== 4. ANALISIS COMPARATIVO ===
+- analisis_comparativo: Texto analizando la tabla comparativa de vulnerabilidades. Mencionar variaciones
+- observacion_tecnica: Observacion tecnica relevante sobre los datos
+
+=== 5. TABLA COMPARATIVA (severidades) ===
+- comp_{critico,alto,medio,bajo,info}_{pasada,actual,variacion}: Valores numericos enteros
+
+=== 6. RESULTADOS OBTENIDOS (7 items) ===
+- resultado_1..7: Hallazgos especificos con detalle tecnico, impacto y evidencia
+
+=== 7. ACCIONES (6 items) ===
+- accion_1..6: Acciones correctivas con responsable y plazo
+
+=== 8. REQUERIMIENTOS (8 items) ===
+- requerimiento_1..8: Requerimientos de seguridad
+
+=== 9. HALLAZGOS POR DOMINIO ===
+- hallazgo_web_1..6: Hallazgos de web externo con detalle tecnico
+- hallazgo_ips_1..14: Hallazgos de IPs publicas con detalle
+- hallazgo_fw_1..6: Hallazgos de firewall con detalle
+
+=== 10. SERVIDORES ===
+- servidor_intro: Parrafo introductorio sobre el estado de servidores
+- servidor_resumen: Resumen del estado general de servidores
+- servidor_genesys: Estado especifico de IPS Genesys
+- serv_activos_{trujillo,genesys,lima,canada}: Numeros de activos por sede
+- serv_hallazgos_{trujillo,genesys,lima,canada}: Hallazgos encontrados por sede
+- serv_riesgo_{trujillo,genesys,lima,canada}: Foco de riesgo principal por sede
+- servidor_trujillo_1..3: Detalles de servidores Trujillo
+- servidor_genesys_2: Detalle adicional Genesys
+- servidor_lima: Detalle servidores Lima
+- servidor_canada_1..2: Detalles servidores Canada
+- prioridad_1..4: Prioridades tecnicas identificadas
+- servidor_estado: Estado general de la infraestructura de servidores
+
+=== 11. INFRAESTRUCTURA DE RED ===
+- switches_parrafo_1..3: Estado de switches
+- wifi_texto: Estado de redes WiFi
+- desktops_parrafo_1..2: Estado de desktops
+- ot_iot_texto: Estado de infraestructura OT/IoT
+
+=== 12. ACCIONES SEMANALES (15 items) ===
+- accion_semana_1..15: Acciones trabajadas detalladas cronologicamente
+
+=== 13. RESULTADOS Y RECOMENDACIONES ===
+- resultado_seguridad_1: Resultado general de seguridad
+- recomendaciones: Array de 3 strings con recomendaciones clave
+- noticias_seguridad: Array de 3 strings con noticias de seguridad relevantes
+
+REGLAS:
+- Usa texto profesional, detallado y concreto con numeros y metricas reales de los DATOS DEL REPORTE
+- Todos los campos son strings EXCEPTO recomendaciones y noticias_seguridad que son arrays de 3 strings
+- Los campos tipo array deben producirse con guion y texto descriptivo (seran convertidos a lista con viñetas)
+- No escapes caracteres HTML
+- No incluyas campos adicionales fuera del schema
+- Responde UNICAMENTE con el JSON sin ningun otro texto"""
 
 
 def _invoke_convertir_docx(datos_json: dict, tenant_id: str) -> dict:
@@ -110,14 +153,14 @@ def _call_groq(prompt: str, system_prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 2000,
+        "max_tokens": 8192,
         "temperature": 0.3,
     }
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers=headers,
         json=data,
-        timeout=60,
+        timeout=120,
     )
 
     if response.status_code != 200:
@@ -139,18 +182,14 @@ def handler(event, context):
         tenant_id = body.get("tenant_id", "tenant-unknown")
         softwares = body.get("softwares_list", "")
 
-        if len(contenido_reporte) > 2000:
-            contenido_reporte = contenido_reporte[:2000] + "\n[...truncado...]"
+        prompt = f"""{contenido_reporte}
 
-        prompt = f"""DATOS DEL REPORTE:
-{contenido_reporte}
-
-INDICACIONES:
+INDICACIONES ADICIONALES:
 {indicaciones}
 
-Genera el JSON exacto del schema. Sin texto extra."""
+Genera el JSON completo del reporte."""
 
-        json_str = _call_groq(prompt, SYSTEM_PROMPT.format(json_schema=JSON_SCHEMA))
+        json_str = _call_groq(prompt, SYSTEM_PROMPT)
 
         json_str = json_str.strip()
         if json_str.startswith("```json"):
@@ -172,7 +211,7 @@ Genera el JSON exacto del schema. Sin texto extra."""
 
         for placeholder in ALL_FIELDS:
             if placeholder not in datos_json:
-                datos_json[placeholder] = f"[Pendiente]"
+                datos_json[placeholder] = ""
 
         resultado_docx = _invoke_convertir_docx(datos_json, tenant_id)
 
