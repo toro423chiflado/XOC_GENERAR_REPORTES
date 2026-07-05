@@ -49,8 +49,8 @@ functions:
   generarreporte:
     handler: src/generarreporte.handler
     description: Orquestador - recibe formulario, llama Analytics/AnalyticsMock, formatea datos, invoca Transia_XML
-    timeout: 60
-    memorySize: 256
+    timeout: 30
+    memorySize: 512
     events:
       - http:
           path: /reporte/generar
@@ -61,20 +61,20 @@ functions:
   analyticsMock:
     handler: src/analytics_mock.handler
     description: Mock de Analytics - devuelve data falsa con el mismo formato que el Analytics real
-    timeout: 30
+    timeout: 15
     memorySize: 256
 
   transiaXml:
     handler: src/transia_xml.handler
-    description: Recibe datos formateados, llama a Groq (Llama 3.1 8B), genera XML, invoca convertir_a_docx
-    timeout: 120
-    memorySize: 512
+    description: Recibe datos formateados, llama a IA (Gemini o Groq), genera JSON, invoca convertir_a_docx
+    timeout: 25
+    memorySize: 1024
 
   convertirDocx:
     handler: src/convertir_a_docx.handler
-    description: Recibe XML desde transiaXml, convierte a DOCX con python-docx, sube a S3
-    timeout: 60
-    memorySize: 512
+    description: Recibe JSON desde transiaXml, convierte a DOCX con docxtpl, sube a S3
+    timeout: 15
+    memorySize: 1024
 
 outputs:
   ApiUrl:

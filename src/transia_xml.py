@@ -57,8 +57,22 @@ LONG_FIELDS = [
 
 SHORT_FIELDS = [f for f in ALL_FIELDS if f not in LONG_FIELDS and f not in ("recomendaciones","noticias_seguridad")]
 
-SYSTEM_PROMPT_SHORT = "Eres analista de seguridad. Genera SOLO JSON valido con campos cortos (texto conciso, numeros)."
-SYSTEM_PROMPT_LONG = "Eres analista de seguridad senior. Genera SOLO JSON valido con parrafos descriptivos detallados usando datos del reporte."
+SYSTEM_PROMPT = """Eres analista de seguridad senior. Genera SOLO JSON valido (sin markdown, sin texto extra) con todos los campos listados. Usa texto profesional y conciso con metricas de los datos del reporte.
+
+CAMPOS (129 total):
+cliente, periodo, fecha_reporte, servicio_monitoreo,
+herramienta_1..7, datos_base, entorno,
+resumen_parrafo_1..4, analisis_comparativo, observacion_tecnica,
+comp_critico|alto|medio|bajo|info_{pasada,actual,variacion},
+resultado_1..7, accion_1..6, requerimiento_1..8,
+hallazgo_web_1..6, hallazgo_ips_1..14, hallazgo_fw_1..6,
+servidor_intro|resumen|genesys,
+serv_activos|hallazgos|riesgo_{trujillo,genesys,lima,canada},
+servidor_trujillo_1..3|genesys_2|lima|canada_1..2,
+prioridad_1..4, servidor_estado,
+switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
+accion_semana_1..15, resultado_seguridad_1,
+recomendaciones (array 3), noticias_seguridad (array 3)"""
 
 
 def _parse_json(text):
@@ -85,7 +99,7 @@ def _call_groq(prompt, system_prompt, max_tokens=2500):
             "max_tokens": max_tokens,
             "temperature": 0.3,
         },
-        timeout=120,
+        timeout=25,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"Groq API error {resp.status_code}: {resp.text}")
@@ -96,16 +110,16 @@ def _call_gemini(prompt, system_prompt):
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return None
-    model = "gemini-2.5-flash"
     resp = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent",
+        params={"key": api_key},
         headers={"Content-Type": "application/json"},
         json={
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 65536},
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192},
         },
-        timeout=120,
+        timeout=20,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text}")
@@ -115,18 +129,36 @@ def _call_gemini(prompt, system_prompt):
     return candidates[0]["content"]["parts"][0]["text"]
 
 
-def _call_ai(prompt, system_prompt, max_tokens=2500):
+def _call_gemini_all(prompt, system_prompt):
     try:
         result = _call_gemini(prompt, system_prompt)
         if result is not None:
             return result, "gemini"
     except Exception as e:
-        print(f"Gemini failed: {e}, falling back to Groq")
+        print(f"Gemini failed: {e}")
+    return None, None
 
-    result = _call_groq(prompt, system_prompt, max_tokens)
-    if result is not None:
-        return result, "groq"
-    raise RuntimeError("No AI provider configured - set GEMINI_API_KEY or GROQ_API_KEY")
+
+def _call_groq_split(base_prompt):
+    """2 Groq calls to stay under 6000 TPM"""
+    # Short fields
+    s_fields = [f for f in ALL_FIELDS if f not in LONG_FIELDS]
+    r1 = _call_groq(
+        f"{base_prompt}\n\nGenera JSON: {', '.join(s_fields)}. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
+        "Eres analista de seguridad. Genera JSON conciso.",
+        max_tokens=1500,
+    )
+    datos = _parse_json(r1)
+
+    # Long fields
+    time.sleep(1)
+    r2 = _call_groq(
+        f"{base_prompt}\n\nGenera JSON: {', '.join(LONG_FIELDS)}. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
+        "Eres analista de seguridad senior. Genera JSON detallado con metricas.",
+        max_tokens=3000,
+    )
+    datos.update(_parse_json(r2))
+    return datos, "groq"
 
 
 def handler(event, context):
@@ -139,23 +171,17 @@ def handler(event, context):
 
         base_prompt = f"{contenido_reporte}\n\nINDICACIONES: {indicaciones}"
 
-        # Short fields: compact
-        result_shorts, provider = _call_ai(
-            f"{base_prompt}\n\nGenera JSON con estos campos EXACTAMENTE (texto conciso, numeros):\n{', '.join(SHORT_FIELDS)}\n\nrecomendaciones y noticias_seguridad como arrays de 3 strings. SOLO JSON.",
-            SYSTEM_PROMPT_SHORT,
-            max_tokens=1500,
+        # Try single Gemini call
+        result_all, provider = _call_gemini_all(
+            f"{base_prompt}\n\nGenera JSON con TODOS los 129 campos listados. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
+            SYSTEM_PROMPT,
         )
-        datos = _parse_json(result_shorts)
 
-        # Long fields: detailed
-        time.sleep(1)
-        result_longs, _ = _call_ai(
-            f"{base_prompt}\n\nGenera JSON con estos campos (texto DETALLADO, parrafos completos con metricas):\n{', '.join(LONG_FIELDS)}\n\nrecomendaciones y noticias_seguridad como arrays de 3 strings. SOLO JSON.",
-            SYSTEM_PROMPT_LONG,
-            max_tokens=3500,
-        )
-        datos_long = _parse_json(result_longs)
-        datos.update(datos_long)
+        if provider != "gemini":
+            # Fallback: 2 Groq calls split
+            datos, provider = _call_groq_split(base_prompt)
+        else:
+            datos = _parse_json(result_all)
 
         for k, v in datos.items():
             if isinstance(v, list):
