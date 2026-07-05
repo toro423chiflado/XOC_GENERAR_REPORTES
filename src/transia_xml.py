@@ -225,8 +225,9 @@ def handler(event, context):
             }),
         }
     except Exception as e:
+        import traceback
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-            "body": json.dumps({"success": False, "error": str(e), "type": type(e).__name__}),
+            "body": json.dumps({"success": False, "error": str(e), "traceback": traceback.format_exc()}),
         }
