@@ -9,9 +9,10 @@ plugins:
 
 provider:
   name: aws
-  runtime: python3.12
+  runtime: python3.11
   region: us-east-1
   stage: dev
+  role: arn:aws:iam::400315371118:role/labrole
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
@@ -19,23 +20,6 @@ provider:
     BUCKET_REPORTES: ${self:service}-reportes-generales-${self:provider.stage}
     BEDROCK_MODEL_ID: anthropic.claude-3-haiku-20240301-v1:0
     ANALYTICS_REAL_FUNCTION: Analytics
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - lambda:InvokeFunction
-      Resource: "*"
-    - Effect: Allow
-      Action:
-        - bedrock:InvokeModel
-      Resource: "*"
-    - Effect: Allow
-      Action:
-        - s3:PutObject
-        - s3:GetObject
-        - s3:PutObjectAcl
-      Resource:
-        - Fn::Sub: arn:aws:s3:::${self:service}-reportes-generales-${self:provider.stage}
-        - Fn::Sub: arn:aws:s3:::${self:service}-reportes-generales-${self:provider.stage}/*
 
 custom:
   pythonRequirements:
