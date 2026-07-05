@@ -26,6 +26,8 @@ custom:
     layer: true
     slim: false
     pythonBin: python3
+    useDownloadCache: false
+    useStaticCache: false
 
 resources:
   Resources:
