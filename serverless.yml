@@ -1,0 +1,105 @@
+service: xoc-reportes
+
+frameworkVersion: "3"
+
+plugins:
+  - serverless-python-requirements
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  stage: dev
+  environment:
+    ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
+    TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
+    CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
+    BUCKET_REPORTES: ${self:service}-reportes-generales-${self:provider.stage}
+    BEDROCK_MODEL_ID: anthropic.claude-3-haiku-20240301-v1:0
+    ANALYTICS_REAL_FUNCTION: Analytics
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - bedrock:InvokeModel
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+        - s3:PutObjectAcl
+      Resource:
+        - Fn::Sub: arn:aws:s3:::${self:service}-reportes-generales-${self:provider.stage}
+        - Fn::Sub: arn:aws:s3:::${self:service}-reportes-generales-${self:provider.stage}/*
+
+custom:
+  pythonRequirements:
+    slim: true
+    layer: true
+    pythonBin: python3
+
+resources:
+  Resources:
+    ReportesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-reportes-generales-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        LifecycleConfiguration:
+          Rules:
+            - Id: ExpireOldReports
+              Status: Enabled
+              ExpirationInDays: 90
+
+functions:
+  generarreporte:
+    handler: src/generarreporte.handler
+    description: Orquestador - recibe formulario, llama Analytics/AnalyticsMock, formatea datos, invoca Transia_XML
+    timeout: 60
+    memorySize: 256
+    layers:
+      - { Ref: PythonRequirementsLambdaLayer }
+    events:
+      - http:
+          path: /reporte/generar
+          method: post
+          cors: true
+          integration: lambda-proxy
+
+  analyticsMock:
+    handler: src/analytics_mock.handler
+    description: Mock de Analytics - devuelve data falsa con el mismo formato que el Analytics real
+    timeout: 30
+    memorySize: 256
+
+  transiaXml:
+    handler: src/transia_xml.handler
+    description: Recibe datos formateados + template, llama a Bedrock (Claude Haiku), genera XML, invoca convertir_a_docx
+    timeout: 120
+    memorySize: 512
+    layers:
+      - { Ref: PythonRequirementsLambdaLayer }
+
+  convertirDocx:
+    handler: src/convertir_a_docx.handler
+    description: Recibe XML desde transiaXml, convierte a DOCX con python-docx, sube a S3
+    timeout: 60
+    memorySize: 512
+    layers:
+      - { Ref: PythonRequirementsLambdaLayer }
+
+outputs:
+  ApiUrl:
+    Description: URL del API Gateway para invocar generarreporte
+    Value:
+      Fn::Sub: https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}/reporte/generar
+  BucketName:
+    Description: Nombre del bucket S3 donde se almacenan los reportes DOCX
+    Value: { Ref: ReportesBucket }
