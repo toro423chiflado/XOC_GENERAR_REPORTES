@@ -1,4 +1,4 @@
-import json, os, sys
+import json, os
 import boto3
 
 lambda_client = boto3.client("lambda")
@@ -40,37 +40,53 @@ ALL_FIELDS = [
     "resultado_seguridad_1","recomendaciones","noticias_seguridad","conclusiones",
 ]
 
-SYSTEM_PROMPT = """Eres un analista senior de ciberseguridad redactando un reporte ejecutivo profesional para un cliente corporativo. El reporte debe transmitir seriedad, experiencia y valor analitico.
+SYSTEM_PROMPT = """Eres un analista senior de ciberseguridad con 15 años de experiencia redactando reportes ejecutivos para clientes corporativos de alto nivel. Tu estilo de redacción es impecable, profesional y persuasivo.
 
-DIRECTRICES DE CALIDAD PROFESIONAL:
-- Lenguaje ejecutivo formal, como para un CEO o CISO
-- Datos especificos con numeros y metricas concretas (nunca terminos vagos como "varios" o "algunos")
-- Vocabulario tecnico apropiado pero comprensible para la alta direccion
-- Parrafos completos con estructura clara (minimo 2-3 oraciones por campo)
-- Tono objetivo, analitico y orientado a soluciones
-- Cada hallazgo debe incluir impacto y recomendacion
+NORMAS DE REDACCIÓN:
+- Ortografía y gramática perfectas. Usa tildes correctamente (sí, í, ó, ú, á, é).
+- Lenguaje formal y técnicamente preciso, pero comprensible para un CEO o CISO.
+- Cada campo debe contener un párrafo completo de 2 a 4 oraciones bien estructuradas.
+- Vocabulario rico y variado. Evita repeticiones.
+- Datos concretos con cifras y métricas específicas extraídas del contenido del reporte.
+- Tono objetivo, analítico y orientado a soluciones.
+- Los títulos y nombres propios deben tener mayúsculas correctas.
+- Sin jerga informal, muletillas ni frases hechas.
 
-CAMPOS (131 total):
-cliente, periodo, fecha_reporte, servicio_monitoreo,
-herramienta_1..7, datos_base, entorno,
-resumen_parrafo_1..4, analisis_comparativo, observacion_tecnica,
-comp_critico|alto|medio|bajo|info_{pasada,actual,variacion},
-resultado_1..7, accion_1..6, requerimiento_1..8,
-hallazgo_web_1..6, hallazgo_ips_1..14, hallazgo_fw_1..6,
-servidor_intro|resumen|genesys,
-serv_activos|hallazgos|riesgo_{trujillo,genesys,lima,canada},
-servidor_trujillo_1..3|genesys_2|lima|canada_1..2,
-prioridad_1..4, servidor_estado,
-switches_parrafo_1..3, wifi_texto, desktops_parrafo_1..2, ot_iot_texto,
-accion_semana_1..15, resultado_seguridad_1, conclusiones,
-recomendaciones (array 3), noticias_seguridad (array 3)
+ESTRUCTURA DE LOS 131 CAMPOS:
 
-REGLA FUNDAMENTAL: Responde UNICAMENTE con el objeto JSON. Ningun texto adicional. Ningun campo vacio."""
+cliente, periodo, fecha_reporte, servicio_monitoreo -> Metadatos e introducción
+herramienta_1..7 -> Nombres de herramientas de seguridad desplegadas
+datos_base, entorno -> Descripción del alcance y entorno evaluado
+resumen_parrafo_1..4 -> Resumen ejecutivo en 4 párrafos impactantes
+analisis_comparativo, observacion_tecnica -> Análisis de tendencias y observaciones técnicas
+comp_critico|alto|medio|bajo|info_{pasada,actual,variacion} -> Métricas numéricas de comparativa (solo números enteros)
+resultado_1..7 -> Resultados detallados por cada herramienta
+accion_1..6 -> Acciones correctivas inmediatas
+requerimiento_1..8 -> Requerimientos técnicos para remediación
+hallazgo_web_1..6 -> Hallazgos de aplicaciones web
+hallazgo_ips_1..14 -> Hallazgos por IP detectados
+hallazgo_fw_1..6 -> Hallazgos de firewall
+servidor_intro|resumen|genesys -> Introducción y resumen de servidores
+serv_activos|hallazgos|riesgo_{trujillo,genesys,lima,canada} -> Estado por sede
+servidor_trujillo_1..3|genesys_2|lima|canada_1..2 -> Detalle de servidores por ubicación
+prioridad_1..4 -> Prioridades de atención
+servidor_estado -> Estado general de servidores
+switches_parrafo_1..3 -> Estado de switches y red
+wifi_texto -> Estado de red WiFi
+desktops_parrafo_1..2 -> Estado de estaciones de trabajo
+ot_iot_texto -> Estado de dispositivos OT/IoT
+accion_semana_1..15 -> Plan de acción semanal detallado (15 semanas)
+resultado_seguridad_1 -> Resultado global de seguridad
+recomendaciones -> Array de 3 recomendaciones estratégicas
+noticias_seguridad -> Array de 3 noticias relevantes
+conclusiones -> Conclusiones finales del reporte
+
+REGLA ABSOLUTA: Responde ÚNICAMENTE con el objeto JSON. Sin texto adicional, sin markdown, sin explicaciones. Ningún campo vacío."""
 
 
 def _parse_json(text):
     if not text or not text.strip():
-        raise ValueError("_parse_json: entrada vacia")
+        raise ValueError("_parse_json: entrada vacía")
     text = text.strip()
     for prefix in ("```json", "```"):
         if text.startswith(prefix):
@@ -80,7 +96,7 @@ def _parse_json(text):
         text = text[:-3]
     text = text.strip()
     if not text:
-        raise ValueError("_parse_json: texto vacio tras limpiar markdown")
+        raise ValueError("_parse_json: texto vacío tras limpiar markdown")
     return json.loads(text)
 
 
@@ -101,25 +117,51 @@ accion_semana_1..15, resultado_seguridad_1, conclusiones,
 recomendaciones (array 3), noticias_seguridad (array 3)"""
     prompt = f"""{base_prompt}
 
-Genera un objeto JSON valido con los siguientes campos (objeto, NO array).
-Cada campo debe contener texto profesional, detallado y con datos especificos.
+Con base en la información proporcionada arriba, genera un objeto JSON válido con los siguientes campos. Cada campo debe contener un párrafo profesional, detallado y con métricas concretas extraídas de los datos del reporte.
 
-Campos a incluir:
+CAMPOS A INCLUIR:
 {compact_fields}
 
-REGLAS:
-- Sustituye ".." por numeros consecutivos (ej. herramienta_1 a herramienta_7)
-- comp_* = numeros enteros (sin comillas)
-- arrays = exactamente 3 strings descriptivos cada uno
-- Capitalizacion correcta en nombres propios y titulos
-- Parrafos completos de 2-3 oraciones como minimo
-- NUNCA campos vacios
-- SOLO el JSON, sin texto antes ni despues"""
+INSTRUCCIONES ESPECÍFICAS:
+
+1. Sustituye ".." por números consecutivos. Ejemplo: herramienta_1, herramienta_2, ..., herramienta_7.
+
+2. Los campos comp_* (comparativa) deben ser SOLO números enteros, sin comillas. Ejemplo: "comp_critico_pasada": 8.
+
+3. Los campos hallazgo_*, resultado_*, accion_*, requerimiento_* deben ser párrafos completos con:
+   - Descripción del hallazgo o resultado
+   - Impacto en la seguridad del negocio
+   - Recomendación específica de remediación
+
+4. Los campos de servidores (servidor_*, serv_*) deben incluir:
+   - Nombre o ubicación del servidor/sede
+   - Estado actual y métricas relevantes
+   - Hallazgos específicos identificados
+
+5. Los campos accion_semana_1..15 deben formar un plan de acción cronológico de 15 semanas.
+
+6. Los arrays (recomendaciones, noticias_seguridad) deben contener EXACTAMENTE 3 strings cada uno.
+
+7. Los campos switches_*, wifi_texto, desktops_*, ot_iot_texto deben describir el estado de la infraestructura de red, estaciones de trabajo y dispositivos OT/IoT.
+
+8. Los campos cliente y fecha_reporte deben respetar los valores ya definidos.
+
+9. Los campos resumen_parrafo_1..4 deben formar un resumen ejecutivo coherente y persuasivo.
+
+10. conclusiones debe ser un párrafo final que sintetice los hallazgos más críticos y la postura de seguridad general.
+
+CALIDAD OBLIGATORIA:
+- Ortografía y gramática perfectas (con tildes)
+- Párrafos de 2 a 4 oraciones bien redactados
+- Datos numéricos específicos de los DATOS DEL REPORTE
+- Tono ejecutivo profesional
+- Sin campos vacíos
+- SOLO el objeto JSON, nada más"""
     client = boto3.client("bedrock-runtime")
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 4096,
-        "temperature": 0.3,
+        "max_tokens": 8192,
+        "temperature": 0.2,
         "system": SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": prompt}],
     })
@@ -133,7 +175,7 @@ REGLAS:
         result = json.loads(resp["body"].read())
         text = result["content"][0]["text"]
         if not text:
-            raise RuntimeError("Bedrock devolvio contenido vacio")
+            raise RuntimeError("Bedrock devolvió contenido vacío")
     except Exception as e:
         raise RuntimeError(f"Bedrock ({model_id}): {e}")
 
