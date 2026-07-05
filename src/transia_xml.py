@@ -42,20 +42,6 @@ ALL_FIELDS = [
     "resultado_seguridad_1","recomendaciones","noticias_seguridad",
 ]
 
-LONG_FIELDS = [
-    "resumen_parrafo_1","resumen_parrafo_2","resumen_parrafo_3","resumen_parrafo_4",
-    "analisis_comparativo","observacion_tecnica",
-    "hallazgo_web_1","hallazgo_web_2","hallazgo_web_3","hallazgo_web_4","hallazgo_web_5","hallazgo_web_6",
-    "hallazgo_fw_1","hallazgo_fw_2","hallazgo_fw_3","hallazgo_fw_4","hallazgo_fw_5","hallazgo_fw_6",
-    "servidor_intro","servidor_resumen","servidor_genesys",
-    "servidor_trujillo_1","servidor_trujillo_2","servidor_trujillo_3",
-    "servidor_genesys_2","servidor_lima","servidor_canada_1","servidor_canada_2",
-    "switches_parrafo_1","switches_parrafo_2","switches_parrafo_3",
-    "wifi_texto","desktops_parrafo_1","desktops_parrafo_2","ot_iot_texto",
-    "recomendaciones","noticias_seguridad",
-]
-
-SHORT_FIELDS = [f for f in ALL_FIELDS if f not in LONG_FIELDS and f not in ("recomendaciones","noticias_seguridad")]
 
 SYSTEM_PROMPT = """Eres analista de seguridad senior. Genera SOLO JSON valido (sin markdown, sin texto extra) con todos los campos listados. Usa texto profesional y conciso con metricas de los datos del reporte.
 
@@ -165,27 +151,16 @@ def _call_gemini_all(prompt, system_prompt):
     return None, "Gemini: no configurado (falta GEMINI_API_KEY)"
 
 
-def _call_groq_split(base_prompt):
-    """2 Groq calls to stay under 6000 TPM"""
-    s_fields = [f for f in ALL_FIELDS if f not in LONG_FIELDS]
-    r1 = _call_groq(
-        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con estos campos:\n{json.dumps(s_fields)}\n\nValores cortos (numeros, texto de 1-2 palabras). recommendationes y noticias_seguridad como arrays de 3 strings cada una. Solo JSON, sin markdown ni texto extra.",
-        "Eres analista de seguridad. Tu unica respuesta debe ser un JSON valido.",
-        max_tokens=1500,
-    )
-    if not r1:
-        raise RuntimeError("Groq primera llamada no devolvio datos")
-    datos = _parse_json(r1)
-
-    time.sleep(2)
-    r2 = _call_groq(
-        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con estos campos:\n{json.dumps(LONG_FIELDS)}\n\nValores descriptivos detallados con parrafos completos usando metricas del reporte. recomendaciones y noticias_seguridad como arrays de 3 strings. Solo JSON, sin markdown ni texto extra.",
-        "Eres analista de seguridad senior. Tu unica respuesta debe ser un JSON valido.",
+def _call_groq_all(base_prompt):
+    """Single Groq call for all fields (under 6000 TPM)"""
+    result = _call_groq(
+        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con TODOS estos campos:\n{json.dumps(ALL_FIELDS)}\n\ncomp_* = numeros, arrays = 3 strings, resto = texto descriptivo. Solo JSON.",
+        "Eres analista de seguridad senior. Tu unica respuesta debe ser un JSON valido con todos los campos.",
         max_tokens=3000,
     )
-    if not r2:
-        raise RuntimeError("Groq segunda llamada no devolvio datos")
-    datos.update(_parse_json(r2))
+    if not result:
+        raise RuntimeError("Groq no devolvio datos")
+    datos = _parse_json(result)
     return datos, "groq"
 
 
@@ -206,9 +181,9 @@ def handler(event, context):
         )
 
         if result_all is None:
-            # Fallback: 2 Groq calls split
+            # Fallback: single Groq call
             try:
-                datos, provider = _call_groq_split(base_prompt)
+                datos, provider = _call_groq_all(base_prompt)
             except Exception as groq_e:
                 raise RuntimeError(f"{gemini_error}. Groq fallback: {groq_e}")
         else:
