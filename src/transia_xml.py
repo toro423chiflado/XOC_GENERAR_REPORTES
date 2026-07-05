@@ -75,7 +75,7 @@ def _call_groq(prompt: str, system_prompt: str) -> str:
         "Content-Type": "application/json",
     }
     data = {
-        "model": "llama3-8b-8192",
+        "model": "mixtral-8x7b-32768",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
@@ -87,8 +87,13 @@ def _call_groq(prompt: str, system_prompt: str) -> str:
         "https://api.groq.com/openai/v1/chat/completions",
         headers=headers,
         json=data,
+        timeout=30,
     )
-    response.raise_for_status()
+
+    if response.status_code != 200:
+        error_detail = response.text
+        raise RuntimeError(f"Groq API error {response.status_code}: {error_detail}")
+
     return response.json()["choices"][0]["message"]["content"]
 
 
