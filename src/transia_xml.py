@@ -76,6 +76,8 @@ recomendaciones (array 3), noticias_seguridad (array 3)"""
 
 
 def _parse_json(text):
+    if not text or not text.strip():
+        raise ValueError(f"_parse_json: entrada vacia (None o solo whitespace)")
     text = text.strip()
     for prefix in ("```json", "```"):
         if text.startswith(prefix):
@@ -83,27 +85,36 @@ def _parse_json(text):
             break
     if text.endswith("```"):
         text = text[:-3]
-    return json.loads(text.strip())
+    text = text.strip()
+    if not text:
+        raise ValueError("_parse_json: texto vacio tras limpiar markdown")
+    return json.loads(text)
 
 
 def _call_groq(prompt, system_prompt, max_tokens=2500):
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         return None
-    resp = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": "llama-3.1-8b-instant",
-            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "temperature": 0.3,
-        },
-        timeout=25,
-    )
-    if resp.status_code != 200:
-        raise RuntimeError(f"Groq API error {resp.status_code}: {resp.text}")
-    return resp.json()["choices"][0]["message"]["content"]
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": 0.3,
+            },
+            timeout=25,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Groq API error {resp.status_code}: {resp.text}")
+        result = resp.json()["choices"][0]["message"]["content"]
+        if not result:
+            raise RuntimeError(f"Groq devolvio contenido vacio (status {resp.status_code})")
+        return result
+    except Exception as e:
+        raise RuntimeError(f"Groq call failed: {e}")
 
 
 def _call_gemini(prompt, system_prompt):
@@ -148,30 +159,32 @@ def _call_gemini_all(prompt, system_prompt):
     try:
         result = _call_gemini(prompt, system_prompt)
         if result is not None:
-            return result, "gemini"
+            return result, None
     except Exception as e:
-        print(f"Gemini failed: {e}")
-    return None, None
+        return None, f"Gemini: {e}"
+    return None, "Gemini: no configurado (falta GEMINI_API_KEY)"
 
 
 def _call_groq_split(base_prompt):
     """2 Groq calls to stay under 6000 TPM"""
-    # Short fields
     s_fields = [f for f in ALL_FIELDS if f not in LONG_FIELDS]
     r1 = _call_groq(
-        f"{base_prompt}\n\nGenera JSON: {', '.join(s_fields)}. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
-        "Eres analista de seguridad. Genera JSON conciso.",
+        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con estos campos:\n{json.dumps(s_fields)}\n\nValores cortos (numeros, texto de 1-2 palabras). recommendationes y noticias_seguridad como arrays de 3 strings cada una. Solo JSON, sin markdown ni texto extra.",
+        "Eres analista de seguridad. Tu unica respuesta debe ser un JSON valido.",
         max_tokens=1500,
     )
+    if not r1:
+        raise RuntimeError("Groq primera llamada no devolvio datos")
     datos = _parse_json(r1)
 
-    # Long fields
-    time.sleep(1)
+    time.sleep(2)
     r2 = _call_groq(
-        f"{base_prompt}\n\nGenera JSON: {', '.join(LONG_FIELDS)}. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
-        "Eres analista de seguridad senior. Genera JSON detallado con metricas.",
+        f"{base_prompt}\n\nGenera UNICAMENTE un JSON valido con estos campos:\n{json.dumps(LONG_FIELDS)}\n\nValores descriptivos detallados con parrafos completos usando metricas del reporte. recomendaciones y noticias_seguridad como arrays de 3 strings. Solo JSON, sin markdown ni texto extra.",
+        "Eres analista de seguridad senior. Tu unica respuesta debe ser un JSON valido.",
         max_tokens=3000,
     )
+    if not r2:
+        raise RuntimeError("Groq segunda llamada no devolvio datos")
     datos.update(_parse_json(r2))
     return datos, "groq"
 
@@ -187,16 +200,20 @@ def handler(event, context):
         base_prompt = f"{contenido_reporte}\n\nINDICACIONES: {indicaciones}"
 
         # Try single Gemini call
-        result_all, provider = _call_gemini_all(
+        result_all, gemini_error = _call_gemini_all(
             f"{base_prompt}\n\nGenera JSON con TODOS los 129 campos listados. Arrays como [\"a\",\"b\",\"c\"]. SOLO JSON.",
             SYSTEM_PROMPT,
         )
 
-        if provider != "gemini":
+        if result_all is None:
             # Fallback: 2 Groq calls split
-            datos, provider = _call_groq_split(base_prompt)
+            try:
+                datos, provider = _call_groq_split(base_prompt)
+            except Exception as groq_e:
+                raise RuntimeError(f"{gemini_error}. Groq fallback: {groq_e}")
         else:
             datos = _parse_json(result_all)
+            provider = "gemini"
 
         for k, v in datos.items():
             if isinstance(v, list):
