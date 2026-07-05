@@ -18,7 +18,7 @@ provider:
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
     BUCKET_REPORTES: ${self:service}-reportes-generales-${self:provider.stage}
-    BEDROCK_MODEL_ID: anthropic.claude-v2:1
+    BEDROCK_MODEL_ID: anthropic.claude-3-sonnet-20240229-v1:0
     ANALYTICS_REAL_FUNCTION: Analytics
 
 custom:
@@ -67,7 +67,7 @@ functions:
 
   transiaXml:
     handler: src/transia_xml.handler
-    description: Recibe datos formateados + template, llama a Bedrock (Claude v2:1), genera XML, invoca convertir_a_docx
+    description: Recibe datos formateados + template, llama a Bedrock (Claude 3 Sonnet), genera XML, invoca convertir_a_docx
     timeout: 120
     memorySize: 512
     layers:
