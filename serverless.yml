@@ -13,8 +13,6 @@ provider:
   region: us-east-1
   stage: dev
   role: arn:aws:iam::400315371118:role/LabRole
-  deploymentBucket:
-    name: xoc-reportes-dev-serverlessdeploy
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
