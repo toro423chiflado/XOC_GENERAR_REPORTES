@@ -68,6 +68,8 @@ functions:
     description: Recibe datos formateados, llama a Groq (Llama 3.1 8B), genera XML, invoca convertir_a_docx
     timeout: 120
     memorySize: 512
+    layers:
+      - { Ref: PythonRequirementsLambdaLayer }
 
   convertirDocx:
     handler: src/convertir_a_docx.handler
