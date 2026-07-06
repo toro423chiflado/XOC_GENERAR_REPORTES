@@ -22,6 +22,11 @@ provider:
             - bedrock:InvokeModel
           Resource:
             - arn:aws:bedrock:*::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0
+        - Effect: Allow
+          Action:
+            - aws-marketplace:ViewSubscriptions
+            - aws-marketplace:Subscribe
+          Resource: "*"
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
