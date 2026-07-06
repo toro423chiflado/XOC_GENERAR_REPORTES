@@ -21,14 +21,14 @@ provider:
           Action:
             - bedrock:InvokeModel
           Resource:
-            - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6
+            - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
     TRANSIA_XML_FUNCTION: ${self:service}-${self:provider.stage}-transiaXml
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
     BUCKET_REPORTES: reportes-generales-${self:provider.stage}-xoc
     ANALYTICS_REAL_FUNCTION: Analytics
-    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'anthropic.claude-sonnet-4-6'}
+    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'}
 
 package:
   patterns:
