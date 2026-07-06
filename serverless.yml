@@ -21,7 +21,6 @@ provider:
           Action:
             - bedrock:InvokeModel
           Resource:
-            - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-5
             - arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6
   environment:
     ANALYTICS_MOCK_FUNCTION: ${self:service}-${self:provider.stage}-analyticsMock
@@ -29,7 +28,7 @@ provider:
     CONVERTIR_DOCX_FUNCTION: ${self:service}-${self:provider.stage}-convertirDocx
     BUCKET_REPORTES: reportes-generales-${self:provider.stage}-xoc
     ANALYTICS_REAL_FUNCTION: Analytics
-    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'anthropic.claude-sonnet-5'}
+    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'anthropic.claude-sonnet-4-6'}
 
 package:
   patterns:
