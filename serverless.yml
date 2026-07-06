@@ -1,6 +1,6 @@
 service: xoc-reportes
 
-org: torochiflado
+org: stevericapa
 
 frameworkVersion: "3"
 
@@ -9,7 +9,6 @@ provider:
   runtime: python3.10
   region: us-east-1
   stage: dev
-  role: arn:aws:iam::400315371118:role/LabRole
   iam:
     role:
       statements:
